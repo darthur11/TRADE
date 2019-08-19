@@ -161,7 +161,10 @@ def segtrends(x, segments=2, charts=True):
     """
 
     import numpy as np
-    y = np.array(x)
+    y = np.array(x['Close'])
+#    for i in range(len(y),1200):
+#        y = np.append(y, y[len(y)-1])
+
     # Implement trendlines
     segments = int(segments)
     maxima = np.ones(segments)
@@ -182,38 +185,77 @@ def segtrends(x, segments=2, charts=True):
 
     if charts:        
         import matplotlib.pyplot as plt
-        plt.figure()
+        plt.rc('font', size=6)  
+        fig = plt.figure(figsize=(8, 6))
+        h = [Size.Fixed(0.5), Size.Fixed(7.)]
+        v = [Size.Fixed(0.7), Size.Fixed(5.)]
+        divider = Divider(fig, (0.0, 0.0, 0., 0.), h, v, aspect=False)
+        ax = Axes(fig, divider.get_position())
+        ax.set_axes_locator(divider.new_locator(nx=1, ny=1))
+        fig.add_axes(ax)
         plt.plot(y, linewidth=1)
         plt.grid(True)
 
     for i in range(0, segments-1):
         maxslope = (maxima[i+1] - maxima[i]) / (x_maxima[i+1] - x_maxima[i])
         a_max = maxima[i] - (maxslope * x_maxima[i])
-        b_max = maxima[i] + (maxslope * (len(y) - x_maxima[i]))
-        maxline = np.linspace(a_max, b_max, len(y))
+        b_max = maxima[i] + (maxslope * (len(y)+300 - x_maxima[i]))
+        maxline = np.linspace(a_max, b_max, len(y)+300)
 
         minslope = (minima[i+1] - minima[i]) / (x_minima[i+1] - x_minima[i])
         a_min = minima[i] - (minslope * x_minima[i])
-        b_min = minima[i] + (minslope * (len(y) - x_minima[i]))
-        minline = np.linspace(a_min, b_min, len(y))
+        b_min = minima[i] + (minslope * (len(y)+300 - x_minima[i]))
+        minline = np.linspace(a_min, b_min, len(y)+300)
 
         if charts:
-            plt.plot(maxline, 'g', linewidth=0.35)
-            plt.plot(minline, 'r', linewidth=.35)
+            plt.plot(maxline, 'g', linewidth=0.15)
+            plt.plot(minline, 'r', linewidth=.15)
 
 
     if charts:
         #plt.show()
-        plt.ylim(-2, 300)
-        plt.savefig('C:/Python/diver/chart.png', dpi = 600)
+        plt.ylim(6500, 8500)
+        plt.rc('xtick', labelsize=6)
+        plt.xticks(range(0,1200,4),x.index[range(0,910,4)], rotation=90)
+        plt.rc('xtick', labelsize=6)
+        plt.xlim(800,1000)
+#        plt.xlim(datetime.datetime(2016,1,1),datetime.datetime(2022,1,1))
+        plt.savefig('C:/git/TRADE/chart.png', dpi = 750)
         plt.close()
-
 
     # OUTPUT
     return x_maxima, maxima, x_minima, minima
+segtrends(data2, segments = 10, charts = True)
 
-segtrends(data['Close'], segments = 12, charts = True)
 
+
+
+data2 = data
+data2.index = [x.date() for x in data2.index]
+
+data2
+
+from mpl_toolkits.axes_grid1 import Divider, Size
+from mpl_toolkits.axes_grid1.mpl_axes import Axes
+
+
+import matplotlib.pyplot as plt
+import datetime
+import numpy as np
+import yfinance as yf
+data = yf.download('^NDX','2016-01-01','2019-08-20')
+
+data.index[100].date()
+
+plt.figure()
+
+plt.plot(data['Close'].index, data['Close'], linewidth=1)
+
+segtrends(data['Close'], segments = 10, charts = True)
+gentrends(data['Close'])
+y = np.array(data['Close'])
+for i in range(len(y),1200):
+    y = np.append(y, y[900])
 
 
 def minitrends(x, window=20, charts=True):
@@ -336,8 +378,6 @@ def iterlines(x, window=30, charts=True):
     return sigs
 
 
-import yfinance as yf
-data = yf. download('AAPL','2016-01-01','2019-08-01')
 
 
 levels = supres(data['Low'], data['High'], n=28, min_touches = 2, stat_likeness_percent = 1.5, bounce_percent = 5)
@@ -348,5 +388,3 @@ for column in levels.columns:
 
 
 minitrends(data['Close'], window = 1/5, charts = True)
-
-data.to_excel('C:/Python/API/test.xlsx')
