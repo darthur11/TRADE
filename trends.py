@@ -5,91 +5,29 @@ Created on Mon Aug 12 13:26:49 2019
 @author: Artur.Dossatayev
 """
 
-def supres(low, high, n=28, min_touches=2, stat_likeness_percent=1.5, bounce_percent=5):
-    """Support and Resistance Testing
-    Identifies support and resistance levels of provided price action data.
-    Args:
-        n(int): Number of frames to evaluate
-        low(pandas.Series): A pandas Series of lows from price action data.
-        high(pandas.Series): A pandas Series of highs from price action data.
-        min_touches(int): Minimum # of touches for established S&R.
-        stat_likeness_percent(int/float): Acceptable margin of error for level.
-        bounce_percent(int/float): Percent of price action for established bounce.
-    
-    ** Note **
-        If you want to calculate support and resistance without regard for
-        candle shadows, pass close values for both low and high.
-    Returns:
-        sup(float): Established level of support or None (if no level)
-        res(float): Established level of resistance or None (if no level)
-    """
-    import pandas as pd
-    import numpy as np
+from functions import find_resistance, find_support
 
-    # Collapse into dataframe
-    df = pd.concat([high, low], keys = ['high', 'low'], axis=1)
-    df['sup'] = pd.Series(np.zeros(len(low)))
-    df['res'] = pd.Series(np.zeros(len(low)))
-    df['sup_break'] = pd.Series(np.zeros(len(low)))
-    df['sup_break'] = 0
-    df['res_break'] = pd.Series(np.zeros(len(high)))
-    df['res_break'] = 0
-    
-    for x in range((n-1)+n, len(df)):
-        # Split into defined timeframes for analysis
-        tempdf = df[x-n:x+1]
-        
-        # Setting default values for support and resistance to None
-        sup = None
-        res = None
-        
-        # Identifying local high and local low
-        maxima = tempdf.high.max()
-        minima = tempdf.low.min()
-        
-        # Calculating distance between max and min (total price movement)
-        move_range = maxima - minima
-        
-        # Calculating bounce distance and allowable margin of error for likeness
-        move_allowance = move_range * (stat_likeness_percent / 100)
-        bounce_distance = move_range * (bounce_percent / 100)
-        
-        # Test resistance by iterating through data to check for touches delimited by bounces
-        touchdown = 0
-        awaiting_bounce = False
-        for y in range(0, len(tempdf)):
-            if abs(maxima - tempdf.high.iloc[y]) < move_allowance and not awaiting_bounce:
-                touchdown = touchdown + 1
-                awaiting_bounce = True
-            elif abs(maxima - tempdf.high.iloc[y]) > bounce_distance:
-                awaiting_bounce = False
-        if touchdown >= min_touches:
-            res = maxima
-        # Test support by iterating through data to check for touches delimited by bounces
-        touchdown = 0
-        awaiting_bounce = False
-        for y in range(0, len(tempdf)):
-            if abs(tempdf.low.iloc[y] - minima) < move_allowance and not awaiting_bounce:
-                touchdown = touchdown + 1
-                awaiting_bounce = True
-            elif abs(tempdf.low.iloc[y] - minima) > bounce_distance:
-                awaiting_bounce = False
-        if touchdown >= min_touches:
-            sup = minima
-        if sup:
-            df['sup'].iloc[x] = sup
-        if res:
-            df['res'].iloc[x] = res
-    res_break_indices = list(df[(np.isnan(df['res']) & ~np.isnan(df.shift(1)['res'])) & (df['high'] > df.shift(1)['res'])].index)
-    for index in res_break_indices:
-        df['res_break'].at[index] = 1
-    sup_break_indices = list(df[(np.isnan(df['sup']) & ~np.isnan(df.shift(1)['sup'])) & (df['low'] < df.shift(1)['sup'])].index)
-    for index in sup_break_indices:
-        df['sup_break'].at[index] = 1
-    ret_df = pd.concat([df['sup'], df['res'], df['sup_break'], df['res_break']], keys = ['sup', 'res', 'sup_break', 'res_break'], axis=1)
-    return ret_df
+data2 = data
 
 
+
+res = find_resistance(data2['Close'])
+
+for i in range(len(res)):
+    data2['R'+str(i)]=res[i]
+
+from matplotlib import pyplot as plt
+plt.figure(figsize=(15,15))
+plt.plot(data2.iloc[:,3:])
+plt.savefig('test2png.png', dpi=600)
+
+data2.drop(['Adj Close', 'Volume'],inplace=True, axis=1)
+
+data2[['Close','R1']].plot()
+data2
+data2['R'+str(1)]=res[0]
+data2['R1']=res[0]
+res.plot()
 
 def gentrends(x, window=1/3.0, charts=True):
     """
@@ -214,7 +152,7 @@ def segtrends(x, segments=2, charts=True):
 
     if charts:
         #plt.show()
-        plt.ylim(6500, 8500)
+        plt.ylim(min(y[-120:]*.9), max(y[-120:]*1.1))
         plt.rc('xtick', labelsize=6)
         plt.xticks(range(0,1200,4),x.index[range(0,910,4)], rotation=90)
         plt.rc('xtick', labelsize=6)
@@ -225,11 +163,15 @@ def segtrends(x, segments=2, charts=True):
 
     # OUTPUT
     return x_maxima, maxima, x_minima, minima
-segtrends(data2, segments = 10, charts = True)
+a,b,c,d = segtrends(data['Close'], segments = 10, charts = True)
 
+gentrends(data['Close'])
 
+levels = supres(data['Low'], data['High'], n=28, min_touches = 2, stat_likeness_percent = 1.5, bounce_percent = 5)
 
+levels
 
+data['Close'][-200:]
 data2 = data
 data2.index = [x.date() for x in data2.index]
 
@@ -258,129 +200,9 @@ for i in range(len(y),1200):
     y = np.append(y, y[900])
 
 
-def minitrends(x, window=20, charts=True):
-    """
-    Turn minitrends to iterative process more easily adaptable to
-    implementation in simple trading systems; allows backtesting functionality.
-    :param x: One-dimensional data set
-    :param window: How long the trendlines should be. If window < 1, then it
-                   will be taken as a percentage of the size of the data
-    :param charts: Boolean value saying whether to print chart to screen
-    """
-
-    import numpy as np
-
-    y = np.array(x)
-    if window < 1:  # if window is given as fraction of data length
-        window = float(window)
-        window = int(window * len(y))
-    x = np.arange(0, len(y))
-    dy = y[window:] - y[:-window]
-    crit = dy[:-1] * dy[1:] < 0
-
-    # Find whether max's or min's
-    maxi = (y[x[crit]] - y[x[crit] + window] > 0) & \
-           (y[x[crit]] - y[x[crit] - window] > 0) * 1
-    mini = (y[x[crit]] - y[x[crit] + window] < 0) & \
-           (y[x[crit]] - y[x[crit] - window] < 0) * 1
-    maxi = maxi.astype(float)
-    mini = mini.astype(float)
-    maxi[maxi == 0] = np.nan
-    mini[mini == 0] = np.nan
-    xmax = x[crit] * maxi
-    xmax = xmax[~np.isnan(xmax)]
-    xmax = xmax.astype(int)
-    xmin = x[crit] * mini
-    xmin = xmin[~np.isnan(xmin)]
-    xmin = xmin.astype(int)
-
-    # See if better max or min in region
-    yMax = np.array([])
-    xMax = np.array([])
-    for i in xmax:
-        indx = np.where(xmax == i)[0][0] + 1
-        try:
-            Y = y[i:xmax[indx]]
-            yMax = np.append(yMax, Y.max())
-            xMax = np.append(xMax, np.where(y == yMax[-1])[0][0])
-        except:
-            pass
-    yMin = np.array([])
-    xMin = np.array([])
-    for i in xmin:
-        indx = np.where(xmin == i)[0][0] + 1
-        try:
-            Y = y[i:xmin[indx]]
-            yMin = np.append(yMin, Y.min())
-            xMin = np.append(xMin, np.where(y == yMin[-1])[0][0])
-        except:
-            pass
-    if y[-1] > yMax[-1]:
-        yMax = np.append(yMax, y[-1])
-        xMax = np.append(xMax, x[-1])
-    if y[0] not in yMax:
-        yMax = np.insert(yMax, 0, y[0])
-        xMax = np.insert(xMax, 0, x[0])
-    if y[-1] < yMin[-1]:
-        yMin = np.append(yMin, y[-1])
-        xMin = np.append(xMin, x[-1])
-    if y[0] not in yMin:
-        yMin = np.insert(yMin, 0, y[0])
-        xMin = np.insert(xMin, 0, x[0])
-
-    # Plot results if desired
-    if charts is True:
-        from matplotlib.pyplot import plot, show, grid
-        plot(x, y)
-        plot(xMax, yMax, '-o')
-        plot(xMin, yMin, '-o')
-        grid(True)
-        show()
-    # Return arrays of critical points
-    return xMax, yMax, xMin, yMin
-
-def iterlines(x, window=30, charts=True):
-    """
-    Turn minitrends to iterative process more easily adaptable to
-    implementation in simple trading systems; allows backtesting functionality.
-    :param x: One-dimensional data set
-    :param window: How long the trendlines should be. If window < 1, then it
-                   will be taken as a percentage of the size of the data
-    :param charts: Boolean value saying whether to print chart to screen
-    """
-
-    import numpy as np
-
-    x = np.array(x)
-    n = len(x)
-    if window < 1:
-        window = int(window * n)
-    sigs = np.zeros(n, dtype=float)
-
-    i = window
-    while i != n:
-        if x[i] > max(x[i-window:i]): sigs[i] = 1
-        elif x[i] < min(x[i-window:i]): sigs[i] = -1
-        i += 1
-
-    xmin = np.where(sigs == -1.0)[0]
-    xmax = np.where(sigs == 1.0)[0]
-    ymin = x[xmin]
-    ymax = x[xmax]
-    if charts is True:
-        from matplotlib.pyplot import plot, grid, show
-        plot(x)
-        plot(xmin, ymin, 'ro')
-        plot(xmax, ymax, 'go')
-        grid(True)
-        show()
-
-    return sigs
 
 
 
-
-levels = supres(data['Low'], data['High'], n=28, min_touches = 2, stat_likeness_percent = 1.5, bounce_percent = 5)
 
 for column in levels.columns:
     data[column] = levels[column]
@@ -388,3 +210,87 @@ for column in levels.columns:
 
 
 minitrends(data['Close'], window = 1/5, charts = True)
+
+
+
+
+
+
+import pandas as pd
+def find_maximums(data,increment):
+    start = 0
+    end = increment
+    maximums = pd.Series([])
+    for i in range(int(len(data)/increment)):
+        maximums = maximums.append(pd.Series(int(data[start:end].max())))
+        start += increment
+        end += increment
+    maximums = list(maximums)
+    maximums.sort()
+    return maximums
+
+def find_minimums(data,increment):
+    start = 0
+    end = increment
+    minimums = pd.Series([])
+    for i in range(int(len(data)/increment)):
+        minimums = minimums.append(pd.Series(int(data[start:end].min())))
+        start += increment
+        end += increment
+    minimums = list(minimums)
+    minimums.sort()
+    return minimums
+
+
+    cutoff = 4
+    increment = 5
+    maximums = find_maximums(data=data['Close'],increment=increment)
+    histogram = np.histogram(maximums,bins=(int(len(maximums)/increment*increment)))
+
+    histogram_occurences = pd.DataFrame(histogram[0])
+    histogram_occurences.columns = ['occurence']
+    histogram_splits = pd.DataFrame(histogram[1])
+    histogram_splits.columns = ['bins']
+    histogram_bins = []
+    for x in histogram_splits.index:
+        element = []
+        if x < len(histogram_splits.index)-1:
+            element.append(int(histogram_splits.iloc[x]))
+            element.append(int(histogram_splits.iloc[x+1]))
+            histogram_bins.append(element)
+
+    histogram_bins = pd.DataFrame(histogram_bins)
+    histogram_bins['occurence'] = histogram_occurences
+    histogram_bins.columns = ['start','end','occurence']
+
+    histogram_bins = histogram_bins[histogram_bins['occurence'] >= cutoff]
+    histogram_bins.index = range(len(histogram_bins))
+    data2 = list(data['Close'])
+    data2.sort()
+    data2 = pd.Series(data2)
+    lst_maxser = []
+    for i in histogram_bins.index:
+        lst_maxser.append(data2[(data2 > histogram_bins['start'][i]) & (data2 < histogram_bins['end'][i])])
+
+    lst_maxser = pd.Series(lst_maxser)
+
+    lst_resistance=[]
+
+    for i in lst_maxser.index:
+        lst_resistance.append(np.linspace(lst_maxser[i].median(),lst_maxser[i].median(),925))
+    
+    resistance_df = pd.DataFrame(lst_resistance)
+    resistance_df.columns = ['resistance']
+    resistance_df.dropna(inplace=True)
+    resistance_df.index = range(len(resistance_df))
+    resistance_ser = pd.Series(resistance_df['resistance'])
+
+from matplotlib import pyplot as plt
+plt.figure(figsize=(15,15))
+plt.plot(list(data['Close']), linewidth=1)
+plt.plot(resistance_df.transpose(),linewidth=0.55)
+plt.savefig('test2png.png', dpi=500)
+
+
+resistance_df.transpose().plot()
+data2.plot()
